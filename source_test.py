@@ -4,294 +4,577 @@ import json
 
 
 # --------------------------------------------------
+# RSS SOURCES
+# --------------------------------------------------
+
+rss_sources = [
+    {
+        "name": "Google AI",
+        "url": "https://blog.google/technology/ai/rss/"
+    },
+    {
+        "name": "eSchool News",
+        "url": "https://www.eschoolnews.com/feed/"
+    },
+    {
+        "name": "Opetushallitus",
+        "url": "https://oph.fi/fi/latest.rss"
+    },
+    {
+        "name": "Theseus",
+        "url": "https://www.theseus.fi/feed/rss_2.0/site"
+    }
+]
+
+
+# --------------------------------------------------
 # SETTINGS
 # --------------------------------------------------
 
-feed_url = "https://www.theseus.fi/feed/rss_2.0/site"
-
 model_name = "qwen2.5:7b"
 
-number_of_articles = 10
+# Maximum articles checked from EACH source
+number_of_articles = 20
 
 
 # --------------------------------------------------
-# READ RSS FEED
+# RESULT LISTS
 # --------------------------------------------------
 
-feed = feedparser.parse(feed_url)
-
-print("Feed:", feed.feed.get("title", "Unknown feed"))
-print("Entries available in feed:", len(feed.entries))
-
-# Take up to 10 articles
-articles_to_check = feed.entries[:number_of_articles]
-
-print("Articles to analyze:", len(articles_to_check))
-
-
-# Lists for results
 kept_articles = []
 review_articles = []
 ignored_articles = []
 
 
 # --------------------------------------------------
-# ANALYZE ARTICLES
+# AI ANALYSIS FUNCTION
 # --------------------------------------------------
 
-for index, article in enumerate(articles_to_check, start=1):
-
-    title = article.get("title", "")
-    link = article.get("link", "")
-    summary = article.get("summary", "")
-
-    print("\n" + "=" * 70)
-    print(f"ARTICLE {index}")
-    print("Title:", title)
-    print("Link:", link)
+def analyze_article(source_name, title, description, link):
 
     prompt = f"""
-You are an information filtering assistant for Suomen eOppimiskeskus ry.
+You are an information monitoring assistant for Suomen eOppimiskeskus ry.
 
-Your job is to decide whether a publication is genuinely relevant
-to the organization's work.
+Your task is to decide whether an article could be useful for the
+organization, its members, or its member newsletter.
 
-Relevant topics include:
+IMPORTANT:
 
+The article does NOT need to mention Suomen eOppimiskeskus ry directly.
+
+An article can be relevant if it discusses developments, research,
+technology, policy, tools, projects, events or trends that could be
+interesting to professionals working with education, learning,
+digitalization or competence development.
+
+The organization is interested in a BROAD range of topics.
+
+
+RELEVANT TOPICS INCLUDE:
+
+EDUCATION AND LEARNING
+- teaching
+- pedagogy
+- learning
+- studying
+- schools
+- universities
+- universities of applied sciences
+- vocational education
+- higher education
+- adult education
+- lifelong learning
+- continuous learning
+- teacher education
+- teacher professional development
+- curriculum development
+- assessment
+- student learning
+- learning research
+
+
+DIGITAL LEARNING
 - digital learning
 - online learning
-- artificial intelligence in education
+- e-learning
+- remote learning
+- hybrid learning
+- blended learning
+- digital learning environments
+- learning management systems
+- LMS platforms
+- virtual classrooms
+- digital learning materials
+- digital teaching methods
+
+
+ARTIFICIAL INTELLIGENCE
+- artificial intelligence
+- generative AI
+- AI assistants
+- AI agents
+- AI tools
+- AI in schools
+- AI in universities
+- AI in teaching
+- AI in learning
+- AI literacy
+- responsible AI
+- ethical AI
+- AI regulation
+- AI policy
+- AI-supported learning
+- AI-supported teaching
+
+
+EDUCATIONAL TECHNOLOGY
 - educational technology
+- EdTech
+- learning technology
+- digital tools for teachers
+- digital tools for students
+- classroom technology
+- emerging technologies
+- virtual reality
+- augmented reality
+- immersive learning
+- learning analytics
+- adaptive learning
+- personalized learning
+
+
+DIGITAL SKILLS AND COMPETENCE
 - digital competence
-- accessibility in digital learning
-- continuous learning
+- digital literacy
+- media literacy
+- information literacy
 - future skills
+- technology skills
 - competence development
-- changes in working life that affect learning or competence development
-- research related to education, learning, digitalization or competence development
-
-IMPORTANT RULES:
-
-- Be strict.
-- Do not invent connections that are not clearly present in the article.
-- Only use information contained in the provided title and text.
-- If the article is unrelated to education, learning, digital skills,
-  educational technology, competence development or working-life learning,
-  give it a low score.
-- Do not recommend an article just because a weak indirect connection
-  could be imagined.
-
-Relevance scale:
-
-1 = Not relevant
-
-2 = Slightly related, but probably not useful
-
-3 = Some relevance and should be reviewed by a human
-
-4 = Clearly relevant to Suomen eOppimiskeskus ry
-
-5 = Highly relevant and directly connected to the organization's work
+- workforce skills
+- reskilling
+- upskilling
 
 
-ARTICLE TITLE:
+WORKING LIFE
+- future of work
+- changes in working life
+- remote work
+- hybrid work
+- workplace learning
+- digital transformation
+- AI in working life
+- automation
+- professional development
+- workforce competence
 
-{title}
+
+ACCESSIBILITY AND RESPONSIBILITY
+- accessibility
+- inclusive education
+- digital accessibility
+- equality in education
+- responsible technology
+- ethical technology
+- data protection
+- cybersecurity in education
+- privacy
+- sustainable technology
+- sustainability
 
 
-ARTICLE TEXT:
+POLICY AND DEVELOPMENT
+- education policy
+- digital education policy
+- AI policy
+- education reform
+- national education development
+- European education initiatives
+- EU digital education
+- research projects
+- education projects
+- development projects
 
-{summary}
+
+NEWSLETTER-WORTHY CONTENT
+- important new reports
+- research
+- studies
+- surveys
+- funding opportunities
+- grants
+- education events
+- webinars
+- seminars
+- conferences
+- new tools
+- new platforms
+- important technology releases
+- major policy changes
+- experimental technologies
+- emerging trends
+- weak signals about the future of education or working life
 
 
-Return ONLY valid JSON in exactly this structure:
+--------------------------------------------------
+
+RELEVANCE SCALE
+
+1 = Completely unrelated.
+
+Examples:
+politics with no connection to education or working life,
+sports, entertainment, crime, celebrity news.
+
+
+2 = Weak connection.
+
+The article mentions technology, education or work,
+but contains little that would be useful for the organization's members.
+
+
+3 = Potentially relevant.
+
+There is a meaningful connection to education, learning,
+technology, competence or working life.
+
+A human should review the article.
+
+
+4 = Clearly relevant.
+
+The article contains information that professionals working
+with digital learning, education technology, AI, competence
+development or working life could reasonably find useful.
+
+
+5 = Highly relevant.
+
+The article directly concerns areas such as digital learning,
+educational technology, AI in education, major education research,
+important digital education policy, significant funding opportunities,
+or major developments affecting education and learning.
+
+
+IMPORTANT SCORING RULE:
+
+Do NOT give an article a score of 1 simply because it is not specifically
+about e-learning.
+
+Education, teaching, learning, schools, universities, skills development,
+AI, technology and working-life changes can all be relevant.
+
+If an article is clearly about education or learning,
+it should normally receive at least 3 unless it has no useful connection
+to the organization's activities.
+
+
+--------------------------------------------------
+
+SUMMARY RULES
+
+Use ONLY the information contained in the article title and description.
+
+Do not invent information.
+
+Do not add facts that are not provided.
+
+Write all Finnish text in fluent and natural standard Finnish.
+
+Avoid literal word-for-word translation.
+
+Write in concise professional Finnish suitable for a member newsletter.
+
+
+--------------------------------------------------
+
+Return ONLY valid JSON.
+
+Use exactly this structure:
 
 {{
-    "summary_fi": "Short Finnish summary",
     "relevance": 1,
-    "reason_fi": "Short explanation in Finnish",
-    "topics": ["topic1", "topic2"],
+    "reason_fi": "Lyhyt perustelu sille, miksi sisältö on tai ei ole relevantti.",
+    "summary_fi": "Selkeä ja luonnollinen 2–3 virkkeen suomenkielinen yhteenveto.",
+    "topics": [
+        "aihe 1",
+        "aihe 2"
+    ],
     "newsletter_recommendation": false
 }}
 
 
-NEWSLETTER RULES:
+ARTICLE INFORMATION
 
-- newsletter_recommendation = true only when relevance is 4 or 5
-- newsletter_recommendation = false when relevance is 1, 2 or 3
+Source:
+{source_name}
 
-Do not output anything outside the JSON.
+Title:
+{title}
+
+Description:
+{description}
+
+Link:
+{link}
 """
 
-    try:
+    response = requests.post(
+        "http://localhost:11434/api/generate",
+        json={
+            "model": model_name,
+            "prompt": prompt,
+            "stream": False,
+            "format": "json",
+            "options": {
+                "temperature": 0
+            }
+        },
+        timeout=120
+    )
+
+    response.raise_for_status()
+
+    response_data = response.json()
+    ai_text = response_data["response"]
+
+    return json.loads(ai_text)
+
+
+# --------------------------------------------------
+# START
+# --------------------------------------------------
+
+print()
+print("=" * 70)
+print("STARTING RSS ANALYSIS")
+print("=" * 70)
+print()
+
+
+# --------------------------------------------------
+# LOOP THROUGH SOURCES
+# --------------------------------------------------
+
+for source in rss_sources:
+
+    print()
+    print("=" * 70)
+    print("SOURCE:", source["name"])
+    print("=" * 70)
+
+    feed = feedparser.parse(source["url"])
+
+    if feed.bozo:
+        print("⚠️ Feed warning:", feed.bozo_exception)
+
+    print("Feed title:", feed.feed.get("title", source["name"]))
+    print("Entries available in feed:", len(feed.entries))
+
+    articles_to_analyze = feed.entries[:number_of_articles]
+
+    print("Articles to analyze:", len(articles_to_analyze))
+    print()
+
+
+    # --------------------------------------------------
+    # LOOP THROUGH ARTICLES
+    # --------------------------------------------------
+
+    for index, article in enumerate(articles_to_analyze, start=1):
+
+        title = article.get("title", "No title")
+        link = article.get("link", "No link")
+
+        description = article.get("summary", "")
+
+        if not description:
+            description = article.get("description", "")
+
+        print("-" * 70)
+        print(f"Article {index}/{len(articles_to_analyze)}")
+        print("Source:", source["name"])
+        print("Title:", title)
+        print("Link:", link)
+
 
         # --------------------------------------------------
-        # SEND ARTICLE TO OLLAMA
+        # AI ANALYSIS
         # --------------------------------------------------
 
-        response = requests.post(
-            "http://localhost:11434/api/generate",
-            json={
-                "model": model_name,
-                "prompt": prompt,
-                "stream": False,
-                "format": "json",
-                "options": {
-                    "temperature": 0
-                }
-            },
-            timeout=120
-        )
+        try:
 
-        response.raise_for_status()
+            analysis = analyze_article(
+                source["name"],
+                title,
+                description,
+                link
+            )
 
-        raw_output = response.json()["response"]
+            relevance = analysis.get("relevance", 1)
+            reason = analysis.get("reason_fi", "")
+            summary = analysis.get("summary_fi", "")
+            topics = analysis.get("topics", [])
 
-        # Convert AI response into Python dictionary
-        analysis = json.loads(raw_output)
+            newsletter_recommendation = analysis.get(
+                "newsletter_recommendation",
+                False
+            )
 
-
-        # --------------------------------------------------
-        # PRINT AI ANALYSIS
-        # --------------------------------------------------
-
-        print("\nAI analysis:")
-
-        print("Summary:", analysis["summary_fi"])
-
-        print("Relevance:", analysis["relevance"])
-
-        print("Reason:", analysis["reason_fi"])
-
-        print("Topics:", analysis["topics"])
-
-        print(
-            "Newsletter:",
-            analysis["newsletter_recommendation"]
-        )
-
-
-        # --------------------------------------------------
-        # FILTER BASED ON RELEVANCE
-        # --------------------------------------------------
-
-        if analysis["relevance"] >= 4:
-
-            print("\n✅ RELEVANT - KEEP ARTICLE")
-
-            kept_articles.append({
+            result = {
+                "source": source["name"],
                 "title": title,
                 "link": link,
-                "summary": analysis["summary_fi"],
-                "relevance": analysis["relevance"],
-                "reason": analysis["reason_fi"],
-                "topics": analysis["topics"]
-            })
+                "relevance": relevance,
+                "reason": reason,
+                "summary": summary,
+                "topics": topics,
+                "newsletter_recommendation": newsletter_recommendation
+            }
+
+            print()
+            print("Relevance:", relevance)
+            print("Topics:", ", ".join(topics))
+            print("Reason:", reason)
+            print("Summary:", summary)
+            print(
+                "Newsletter recommendation:",
+                newsletter_recommendation
+            )
+
+            if relevance >= 4:
+
+                kept_articles.append(result)
+
+                print()
+                print("✅ KEEP ARTICLE")
+
+            elif relevance == 3:
+
+                review_articles.append(result)
+
+                print()
+                print("🟡 REVIEW ARTICLE")
+
+            else:
+
+                ignored_articles.append(result)
+
+                print()
+                print("❌ IGNORE ARTICLE")
 
 
-        elif analysis["relevance"] == 3:
+        except requests.exceptions.RequestException as error:
 
-            print("\n🟡 MAYBE - REVIEW ARTICLE")
-
-            review_articles.append({
-                "title": title,
-                "link": link,
-                "summary": analysis["summary_fi"],
-                "relevance": analysis["relevance"],
-                "reason": analysis["reason_fi"],
-                "topics": analysis["topics"]
-            })
+            print()
+            print("❌ Error connecting to Ollama:")
+            print(error)
 
 
-        else:
+        except json.JSONDecodeError as error:
 
-            print("\n❌ IGNORE ARTICLE")
-
-            ignored_articles.append({
-                "title": title,
-                "link": link,
-                "relevance": analysis["relevance"]
-            })
+            print()
+            print("❌ AI returned invalid JSON:")
+            print(error)
 
 
-    except requests.exceptions.RequestException as error:
+        except Exception as error:
 
-        print("\n⚠️ Error connecting to Ollama:")
-        print(error)
-
-
-    except json.JSONDecodeError as error:
-
-        print("\n⚠️ AI returned invalid JSON:")
-        print(error)
-        print("Raw output:")
-        print(raw_output)
+            print()
+            print("❌ Unexpected error:")
+            print(error)
 
 
-    except Exception as error:
-
-        print("\n⚠️ Error analyzing article:")
-        print(error)
+        print()
 
 
 # --------------------------------------------------
 # FINAL RESULTS
 # --------------------------------------------------
 
-print("\n")
+print()
 print("=" * 70)
 print("FINAL RESULTS")
 print("=" * 70)
 
-print("\nChecked articles:", len(articles_to_check))
+total_checked = (
+    len(kept_articles)
+    + len(review_articles)
+    + len(ignored_articles)
+)
 
-print("✅ Relevant articles:", len(kept_articles))
-
-print("🟡 Articles for review:", len(review_articles))
-
-print("❌ Ignored articles:", len(ignored_articles))
-
-
-# --------------------------------------------------
-# SHOW RELEVANT ARTICLES
-# --------------------------------------------------
-
-if kept_articles:
-
-    print("\n")
-    print("=" * 70)
-    print("RELEVANT ARTICLES")
-    print("=" * 70)
-
-    for article in kept_articles:
-
-        print("\n✅", article["title"])
-        print("Relevance:", article["relevance"])
-        print("Summary:", article["summary"])
-        print("Reason:", article["reason"])
-        print("Topics:", article["topics"])
-        print("Link:", article["link"])
+print()
+print("Checked articles:", total_checked)
+print("Relevant articles:", len(kept_articles))
+print("Articles for review:", len(review_articles))
+print("Ignored articles:", len(ignored_articles))
 
 
 # --------------------------------------------------
-# SHOW ARTICLES THAT NEED HUMAN REVIEW
+# RELEVANT ARTICLES
 # --------------------------------------------------
 
-if review_articles:
+print()
+print("=" * 70)
+print("✅ RELEVANT ARTICLES")
+print("=" * 70)
 
-    print("\n")
-    print("=" * 70)
-    print("ARTICLES TO REVIEW")
-    print("=" * 70)
+if not kept_articles:
+    print("No relevant articles found.")
 
-    for article in review_articles:
+for article in kept_articles:
 
-        print("\n🟡", article["title"])
-        print("Relevance:", article["relevance"])
-        print("Summary:", article["summary"])
-        print("Reason:", article["reason"])
-        print("Topics:", article["topics"])
-        print("Link:", article["link"])
+    print()
+    print("Source:", article["source"])
+    print("Title:", article["title"])
+    print("Relevance:", article["relevance"])
+    print("Topics:", ", ".join(article["topics"]))
+    print("Reason:", article["reason"])
+    print("Summary:", article["summary"])
+    print("Link:", article["link"])
+
+ 
+# --------------------------------------------------
+# REVIEW ARTICLES
+# --------------------------------------------------
+
+print()
+print("=" * 70)
+print("🟡 ARTICLES FOR REVIEW")
+print("=" * 70)
+
+if not review_articles:
+    print("No articles require review.")
+
+for article in review_articles:
+
+    print()
+    print("Source:", article["source"])
+    print("Title:", article["title"])
+    print("Relevance:", article["relevance"])
+    print("Topics:", ", ".join(article["topics"]))
+    print("Reason:", article["reason"])
+    print("Summary:", article["summary"])
+    print("Link:", article["link"])
 
 
-print("\nAnalysis finished.")
+# --------------------------------------------------
+# IGNORED ARTICLES
+# --------------------------------------------------
+
+print()
+print("=" * 70)
+print("❌ IGNORED ARTICLES")
+print("=" * 70)
+
+if not ignored_articles:
+    print("No ignored articles.")
+
+for article in ignored_articles:
+
+    print()
+    print("Source:", article["source"])
+    print("Title:", article["title"])
+    print("Relevance:", article["relevance"])
+    print("Reason:", article["reason"])
+    print("Link:", article["link"])
